@@ -31,7 +31,7 @@ def create_test_data():
         db.session.add(new_station)
         db.session.commit()
 
-        new_plug = Plug(station_id=new_station.id, device_id="29e137c3-04b5-44f2-8689-5e33fc555a60")
+        new_plug = Plug(station_id=new_station.id, device_id="29e137c3-04b5-44f2-8689-5e33fc555a60", device_type="godegee")
         db.session.add(new_plug)
         db.session.commit()
         
@@ -51,6 +51,7 @@ def create_plug():
     data = request.get_json()
     station_id = data.get('station_id')
     device_id = data.get('device_id')
+    device_type = data.get('device_type')
     
     with app.app_context():
         # station_id가 존재하는지 확인
@@ -59,14 +60,15 @@ def create_plug():
             return jsonify({"error": "Station not found"}), 404
 
         # 새로운 플러그 생성 및 추가
-        new_plug = Plug(station_id=station_id, device_id=device_id)
+        new_plug = Plug(station_id=station_id, device_id=device_id, device_type=device_type)
         db.session.add(new_plug)
         db.session.commit()
         
         return jsonify({
             "station_id": new_plug.station_id,
             "plug_id": new_plug.id,
-            "device_id": new_plug.device_id
+            "device_id": new_plug.device_id,
+            "device_type": new_plug.device_type
         })
 
 @app.route('/golden_test/<int:plug_id>')
@@ -95,21 +97,86 @@ def golden_test(plug_id):
         else:
             return "No plug found!"
 
-# @app.route('/api/data', methods=['GET'])
-# def get_data():
-#     data = Plug_Raw.query.all()
-#     result = []
-#     for item in data:
-#         result.append({
-#             'plug_id': item.plug_id,
-#             'power_state': item.power_state,
-#             'current_power': item.current_power,
-#             'total_power_usage': item.total_power_usage,
-#             'device_type': item.device_type,
-#             'current_date': item.current_date,
-#             'start_date': item.start_date,
-#         })
-#     return jsonify(result)
+@app.route('/golden_test/all')
+def golden_test_all():
+    with app.app_context():
+        plugs = Plug.query.all()
+        results = []
+        for plug in plugs:
+            data, _ = fetch_data(plug.id, plug.device_id)
+            components = data.get('components', {}).get('main', {})
+            switch_info = components.get('switch', {}).get('switch', {})
+            
+            if switch_info.get('value', 'off') == 'on':
+                start_date_str = switch_info.get('timestamp', datetime.utcnow().isoformat())
+                start_date = parser.parse(start_date_str).replace(tzinfo=None)  # offset-naive로 변환
+                current_date = datetime.utcnow()
+                time_difference = (current_date - start_date).total_seconds() / 60  # 분 단위로 변환
+                if time_difference > plug.golden_time:
+                    results.append({
+                        "plug_id": plug.id,
+                        "status": True,
+                        "reason": "Time threshold exceeded"
+                    })
+                    continue
+            
+            power_info = components.get('powerMeter', {}).get('power', {})
+            power_value = power_info.get('value', 0.0)
+            if power_value > plug.golden_power:
+                results.append({
+                    "plug_id": plug.id,
+                    "status": True,
+                    "reason": "Power threshold exceeded"
+                })
+                continue
+            
+            results.append({
+                "plug_id": plug.id,
+                "status": False,
+                "reason": None
+            })
+        
+        return jsonify(results)
+
+
+@app.route('/read_plugs', methods=['GET'])
+def read_plugs():
+    with app.app_context():
+        plugs = Plug.query.all()
+        result = []
+        for plug in plugs:
+            
+            data, _ = fetch_data(plug.id, plug.device_id)
+            components = data.get('components', {}).get('main', {})
+
+            power_info = components.get('powerMeter', {}).get('power', {})
+            power_value = power_info.get('value', 0.0)
+
+            power_consumption_info = components.get('powerConsumptionReport', {}).get('powerConsumption', {}).get('value', {})
+            total_energy = power_consumption_info.get('energy', 0)
+
+            switch_info = components.get('switch', {}).get('switch', {})
+            switch_value = switch_info.get('value', 'off')
+            start_date_str = switch_info.get('timestamp', datetime.utcnow().isoformat())
+
+            power_state = switch_value
+            current_date = datetime.utcnow()
+
+            # 문자열을 datetime 객체로 변환
+            start_date = parser.parse(start_date_str)
+
+                
+            result.append({
+                "plug_id": plug.id,
+                "device_id": plug.device_id,
+                "power_state": power_state,
+                "current_power": power_value,
+                "total_power_usage": total_energy,
+                "current_date": current_date.isoformat(),
+                "start_date": start_date.isoformat()
+            })
+
+        return jsonify(result)
 
 ## ------------------------- ##
 
@@ -161,7 +228,6 @@ def store_data(data, plug_id):
             power_state=power_state,
             current_power=power_value,
             total_power_usage=total_energy,
-            device_type='example_device_type',
             current_date=current_date,
             start_date=start_date,
         )

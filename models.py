@@ -37,6 +37,7 @@ class Plug(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     station_id = db.Column(db.Integer, db.ForeignKey('stations.id'), nullable=False)
     device_id = db.Column(db.String(80), nullable=False)
+    device_type = db.Column(db.String(80), nullable=False)
     golden_time = db.Column(db.Integer, nullable=False, default=0)
     golden_power = db.Column(db.Float, nullable=False, default=0)
     plug_raws = db.relationship('Plug_Raw', backref='plug')
@@ -53,7 +54,7 @@ class Plug_Raw(db.Model):
     power_state = db.Column(db.String(80), nullable=False)
     current_power = db.Column(db.Float, nullable=False)
     total_power_usage = db.Column(db.Float, nullable=False)
-    device_type = db.Column(db.String(80), nullable=False)
+    
     current_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     start_date = db.Column(db.DateTime, nullable=False)
     def __repr__(self):
