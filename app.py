@@ -46,6 +46,29 @@ def create_test_data():
         "plug_id": plug_id
     })
 
+@app.route('/create_plug', methods=['POST'])
+def create_plug():
+    data = request.get_json()
+    station_id = data.get('station_id')
+    device_id = data.get('device_id')
+    
+    with app.app_context():
+        # station_id가 존재하는지 확인
+        station = Station.query.get(station_id)
+        if not station:
+            return jsonify({"error": "Station not found"}), 404
+
+        # 새로운 플러그 생성 및 추가
+        new_plug = Plug(station_id=station_id, device_id=device_id)
+        db.session.add(new_plug)
+        db.session.commit()
+        
+        return jsonify({
+            "station_id": new_plug.station_id,
+            "plug_id": new_plug.id,
+            "device_id": new_plug.device_id
+        })
+
 @app.route('/golden_test/<int:plug_id>')
 def golden_test(plug_id):
     with app.app_context():
