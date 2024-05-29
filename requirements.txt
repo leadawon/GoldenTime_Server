@@ -12,6 +12,8 @@ importlib-metadata==6.7.0
 itsdangerous==2.1.2
 Jinja2==3.1.4
 MarkupSafe==2.1.5
+numpy==1.21.6
+python-dateutil==2.9.0.post0
 pytz==2024.1
 requests==2.31.0
 schedule==1.2.1
